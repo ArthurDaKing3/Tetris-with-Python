@@ -1,13 +1,8 @@
 # TODOS 
 # - AGREGAR UNA ANIMACION CUANDO SE INCREMENTA DE NIVEL
 # - AGREGAR UNA ANIMACION CON LOS PUNTOS GANADOS CUANDO SE ELIMINA UNA FILA 
-# - IMPLEMENTAR LA FUNCION DE 'GUARDAR_PIEZA' QUE DEPENDIENDO SI HAY UNA PIEZA PREVIA 
-#       GUARDADA, GUARDARA EL ARREGLO 'PIEZA_RECT' EN UN ARREGLO DISTINTO LLAMADO 
-#       'PIEZA_GUARDADA_RECT' AL PRESIONAR 'C' GENERANDO TAMBIEN UNA NUEVA PIEZA 
-#        O REMPLAZANDO EL ARREGLO 'PIEZA_RECT' POR EL ARREGLO 'PIEZA_GUARDADA_RECT', 
-#        Y VICEVERSA  
-# - DIBUJAR LOS RECTANGULOS DEL ARREGLO 'PIEZA_GUARDADA' EN 'INFO_SURF'
-# - DIBUJAR LOS RECTANGULOS DE LA SIGUIENTE PIEZA QUE VA A GENERARSE
+# - AGREGAR UNA ANIMACION CUANDO SE CONSIGUE UN TETRIS
+# - CAMBIAR EL SISTEMA DE PUNTOS PARA GANAR MAS PUNTOS ENTRE MAS FILAS ELIMINES A LA VEZ
 # - HACER UN ARRAY 'PIEZAS_RECT_PREV' QUE CONTENGA LOS MISMOS RECTANGULOS QUE
 #       'PIEZAS_RECT' PERO COLOCADOS LO MAS BAJO POSIBLE, EVITANDO COLISIONES
 # - DIBUJAR ESOS RECTANGULOS CON UN BORDE DEL COLOR DE LA PIEZA 
@@ -50,15 +45,23 @@ logo_surf = pygame.image.load('./assets/img/logo.png').convert_alpha()
 logo_surf = pygame.transform.scale(logo_surf, (231,140))
 
 # FUENTE Y TEXTOS
-font = pygame.font.Font('./font/Tetris.ttf', 30)
+font = pygame.font.Font('./font/Tetris.ttf', 20)
 score_text = font.render('Score: 0', True, ('white'))
 level_text = font.render('Level: 1', True, ('white'))
 lines_text = font.render('Lines: 0', True, ('white'))
+next_text = font.render('Next:', True, ('white'))
+hold_text = font.render('Hold:', True, ('white'))
  
 # SE DEFINE LA PUNTUACION, NIVEL Y FILAS ELIMINADAS
 score = 0
 lines = 0
 level = 1
+
+# AREA DONDE ESTARA LA PIEZA GUARDADA Y LA SIGUIENTE PIEZA
+next_surf = pygame.Surface((145,145))
+next_surf.fill('black')
+hold_surf = pygame.Surface((145,145))
+hold_surf.fill('black')
 
 # MATRIZ FONDO 10x18 QUE CONTIENE LOS 'SURFACES' DEL FONDO
 matriz_fondo = []
@@ -80,8 +83,17 @@ aumentar_velocidad = False
 # LISTA CON LOS 'RECTANGLES' DE LAS PIEZAS BLOQUEADAS
 piezas_bloqueadas = []
 
+# MATRIZ DONDE SE GUARDA LA PIEZA GUARDADA
+piezas_guardadas = []
+
+# LISTA DONDE SE GUARDAN LOS 'RECTANGLES' DE LAS PIEZAS GUARDADAS
+piezas_guardadas_rect = []
+
 # LISTA DONDE SE GUARDARAN LOS RECTANGULOS DE LAS PIEZAS
 piezas_rect = []
+
+# LISTA DONDE SE GUARDARAN LOS RECTANGLUS DE LA SIGUIENTE PIEZA
+sig_piezas_rect = []
 
 # LISTA DONDE SE GUARDA EL NUMERO DE FILAS LLENAS
 filas_llenas = []
@@ -96,6 +108,7 @@ Z_surf = pygame.image.load('./assets/textures/Z.png').convert_alpha()
 T_surf = pygame.image.load('./assets/textures/T.png').convert_alpha()
 
 # MATRICES 4x4 DE LAS PIEZAS, INDICANDO CON UN 1 LAS POSICIONES DE LA PIEZA
+sig_pieza = []
 pieza = [
     [0,0,0,0],
     [0,0,0,0],
@@ -264,18 +277,38 @@ def actualizar_info(score, level, lines):
     score_text = font.render('Score: %s'%str(score), True, ('white'))
     level_text = font.render('Level: %s'%str(level), True, ('white'))
     lines_text = font.render('Lines: %s'%str(lines), True, ('white'))
-    info_surf.blit(score_text, (60,220))
-    info_surf.blit(level_text, (60, 270))
-    info_surf.blit(lines_text, (60, 320))
+    info_surf.blit(score_text, (80, 180))
+    info_surf.blit(level_text, (80, 210))
+    info_surf.blit(lines_text, (80, 240))
 
-def generar_pieza():
-    global pieza 
+def pieza_aleatoria():
     global bolsa_piezas
     if bolsa_piezas == []: bolsa_piezas = [I,O,S,J,L,Z,T]
-    
-    elegir_pieza = random.choice(bolsa_piezas)
-    bolsa_piezas.remove(elegir_pieza)
-    pieza = elegir_pieza[0]
+    pieza_aleatoria = random.choice(bolsa_piezas)
+    bolsa_piezas.remove(pieza_aleatoria)
+    return pieza_aleatoria
+
+def generar_pieza():
+    global pieza
+    global sig_pieza 
+    global sig_pieza_color_surf 
+
+    if sig_pieza:
+        pieza = sig_pieza
+        generar_pieza_rect()
+        sig_pieza = pieza_aleatoria()[0]
+        sig_pieza_color_surf = get_color_pieza(sig_pieza)
+        generar_sig_pieza_rect()
+    else:
+        sig_pieza = pieza_aleatoria()[0]
+        sig_pieza_color_surf = get_color_pieza(sig_pieza)
+        generar_sig_pieza_rect()
+        pieza = pieza_aleatoria()[0]
+        generar_pieza_rect()
+
+def generar_pieza_guardada(pieza_guardada):
+    global pieza 
+    pieza = pieza_guardada
     generar_pieza_rect()
 
 def generar_pieza_rect():
@@ -294,6 +327,31 @@ def generar_pieza_rect():
         for j in piezas_bloqueadas:
             if(i.colliderect(j)):
                 game_over = True
+
+def generar_pieza_guardada_rect(pieza_guardada):
+    global piezas_guardadas_rect
+    global game_over
+    piezas_guardadas_rect = []
+    for f in range(pieza_guardada.__len__()):
+        if f == 0: y_coord = 500
+        else: y_coord = 500 + (f * 36)
+        for c in range(pieza_guardada[f].__len__()):
+            if c == 0: x_coord = 100
+            else: x_coord = 100 + (c * 36)
+            if pieza_guardada[f][c] == 1: 
+                piezas_guardadas_rect.append(I_surf.get_rect(topleft = (x_coord, y_coord)))
+
+def generar_sig_pieza_rect():
+    global sig_piezas_rect   
+    sig_piezas_rect = [] 
+    for f in range(sig_pieza.__len__()):
+        if f == 0: y_coord = 320
+        else: y_coord = 320 + (f * 36)
+        for c in range(sig_pieza[f].__len__()):
+            if c == 0: x_coord = 100
+            else: x_coord = 100 + (c * 36)
+            if sig_pieza[f][c] == 1: 
+                sig_piezas_rect.append(I_surf.get_rect(topleft = (x_coord, y_coord)))
 
 def actualizar_pieza_rect():
     global piezas_rect
@@ -335,7 +393,7 @@ def get_pieza():
     for i in range(T.__len__()):
         if pieza == T[i]: return(T)
 
-def get_color_pieza():
+def get_color_pieza(pieza):
     for i in range(I.__len__()):
         if pieza == I[i]: return(I_surf)
     for i in range(O.__len__()):
@@ -369,8 +427,24 @@ def bloquear_pieza():
         y_coord = piezas_rect[f].y
         x_pos = int(x_coord/36)
         y_pos = int(y_coord/36)
-        matriz_fondo[y_pos][x_pos] = color_surf
+        matriz_fondo[y_pos][x_pos] = pieza_color_surf
     generar_pieza()
+
+def guardar_pieza():
+    global piezas_guardadas_color_surf
+    global piezas_guardadas
+    global piezas_rect
+    if piezas_guardadas:
+        pieza_temp = get_pieza()[0]
+        generar_pieza_guardada(piezas_guardadas)
+        piezas_guardadas = pieza_temp
+        generar_pieza_guardada_rect(piezas_guardadas)
+        piezas_guardadas_color_surf = get_color_pieza(piezas_guardadas)
+    else:
+        piezas_guardadas = get_pieza()[0]
+        generar_pieza_guardada_rect(piezas_guardadas)
+        piezas_guardadas_color_surf = get_color_pieza(piezas_guardadas)
+        generar_pieza()
 
 def checar_filas():
     for f in range(matriz_fondo.__len__()):
@@ -496,6 +570,9 @@ while not game_over:
 
             if event.key == pygame.K_UP:
                 girar_pieza()
+
+            if event.key == pygame.K_c:
+                guardar_pieza()
         
         elif event.type == pygame.KEYUP:
             if event.key == pygame.K_DOWN:
@@ -533,13 +610,13 @@ while not game_over:
 
     checar_filas()
 
-    color_surf = get_color_pieza()
+    pieza_color_surf = get_color_pieza(pieza)
 
     screen.blit(game_surf, (0,0))
     
     # COLOCA LOS 'RECTANGLES' DE LAS PIEZAS BLOQUEADAS EN LA PANTALLA
     for i in range(piezas_bloqueadas.__len__()):
-        game_surf.blit(color_surf, piezas_bloqueadas[i])
+        game_surf.blit(pieza_color_surf, piezas_bloqueadas[i])
 
     # COLOCA EL FONDO EN LA PANTALLA
     for f in range(matriz_fondo.__len__()):
@@ -552,13 +629,26 @@ while not game_over:
 
     # COLOCA LA PIEZA ACTIVA EN LA PANTALLA
     for f in range(piezas_rect.__len__()):
-        game_surf.blit(color_surf, piezas_rect[f])
+        game_surf.blit(pieza_color_surf, piezas_rect[f])
 
+    # COLOCA EL AREA DE INFORMACION A LA DERECHA DEL AREA DE JUEGO
     screen.blit(info_surf, (360,0))
     info_surf.blit(logo_surf, (20,20))
-    info_surf.blit(score_text, (60,220))
-    info_surf.blit(level_text, (60, 270))
-    info_surf.blit(lines_text, (60, 320))
+    info_surf.blit(score_text, (80, 180))
+    info_surf.blit(level_text, (80, 210))
+    info_surf.blit(lines_text, (80, 240))
+    info_surf.blit(next_text, (65, 280))
+    info_surf.blit(next_surf, (65, 320))
+    info_surf.blit(hold_text, (65, 470))
+    info_surf.blit(hold_surf, (65, 500))
+
+    # COLOCA LA SIGUIENTE PIEZA EN LA PANTALLA
+    for p in sig_piezas_rect:
+        info_surf.blit(sig_pieza_color_surf, p)
+
+    # COLOCA LA PIEZA GUARDADA EN LA PANTALLA
+    for p in piezas_guardadas_rect:
+        info_surf.blit(piezas_guardadas_color_surf, p)
 
     pygame.display.flip()
     clock.tick(FPS)
